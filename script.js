@@ -22,6 +22,7 @@
   let floor = 1, run = 0, score = 0, coins = 0, elapsed = 0, state = 'playing', lastTime = 0, shake = 0, levelSeed = 0;
   let mouse = { x: 0, y: 0, screenX: 0, screenY: 0, inside: false, down: false };
   let touchAimDirection = null;
+  let touchMoveDirection = null;
   let touchAttackHeld = false;
   let camera = { x: 0, y: 0 };
   let audioContext, musicTimer, musicStep = 0, musicMuted = false, touchControlsEnabled = true;
@@ -159,7 +160,7 @@
     currentWeapon = currentWeapon || 'blade';
     generateDungeon();
     const start = rooms[0];
-    player = { x: (start.cx + .5) * TILE, y: (start.cy + .5) * TILE, w: 14, h: 16, hp: MAX_HP, maxHp: MAX_HP, speed: 145, slowTimer: 0, attackTimer: 0, swingTimer: 0, spinTimer: 0, spinAngle: 0, spinHitTimer: 0, charge: 0, charging: false, invuln: 0, aimAngle: 0, facing: { x: 1, y: 0 }, drawState: null };
+    player = { x: (start.cx + .5) * TILE, y: (start.cy + .5) * TILE, w: 14, h: 16, hp: MAX_HP, maxHp: MAX_HP, speed: 145, slowTimer: 0, attackTimer: 0, swingTimer: 0, spinTimer: 0, spinAngle: 0, spinHitTimer: 0, charge: 0, charging: false, clawSelfDrainTimer: 2, invuln: 0, aimAngle: 0, facing: { x: 1, y: 0 }, drawState: null };
     updateCamera();
     mouse.screenX = canvas.width / 2 + 100; mouse.screenY = canvas.height / 2; syncMouseWorld(); mouse.inside = false; mouse.down = false;
     const last = rooms[rooms.length - 1];
@@ -230,7 +231,7 @@
       const stats = { boss: [19, 1.4], minotaur: [25, 1.6], mage: [28, 1.25], tank: [17, 1.2], golem: [14, 1.35], brute: [22, 1.05], wraith: [57, .62], spider: [65, .65], bat: [43, .78], imp: [50, .7], slime: [25, .9], skull: [34, .82], charger: [78, .65], necromancer: [24, 1.45] }[type];
       const maxHp = type === 'boss' ? 28 + floor * 8 : type === 'minotaur' ? 36 + floor * 10 : type === 'tank' ? 14 : type === 'golem' ? 10 : type === 'necromancer' ? 9 : type === 'charger' ? 8 : 5;
       const size = type === 'boss' ? 28 : type === 'minotaur' ? 32 : type === 'tank' || type === 'golem' ? 20 : type === 'charger' ? 18 : 15;
-      enemies.push({ x: (spot.x + .5) * TILE, y: (spot.y + .5) * TILE, w: size, h: size, hp: maxHp, maxHp, speed: stats[0] + floor * 2, damage: type === 'boss' ? 3 : type === 'minotaur' ? 4 : type === 'tank' || type === 'golem' || type === 'brute' || type === 'charger' ? 2 : 1, hitTimer: rand(0, 60) / 100, shotTimer: rand(30, 120) / 100, webTimer: rand(180, 330) / 100, growlTimer: rand(140, 360) / 100, flash: 0, wobble: Math.random() * 6, steerSide: Math.random() < .5 ? -1 : 1, pathTimer: 0, pathDir: null, type });
+      enemies.push({ x: (spot.x + .5) * TILE, y: (spot.y + .5) * TILE, w: size, h: size, hp: maxHp, maxHp, speed: stats[0] + floor * 2, damage: type === 'boss' ? 3 : type === 'minotaur' ? 4 : type === 'tank' || type === 'golem' || type === 'brute' || type === 'charger' ? 2 : 1, hitTimer: rand(0, 60) / 100, shotTimer: rand(30, 120) / 100, webTimer: rand(180, 330) / 100, growlTimer: rand(140, 360) / 100, clawDrain: false, clawDrainTimer: 0, chargeTimer: 0, chargeCooldown: type === 'minotaur' ? rand(100, 220) / 100 : 0, flash: 0, wobble: Math.random() * 6, steerSide: Math.random() < .5 ? -1 : 1, pathTimer: 0, pathDir: null, type });
     }
   }
 
@@ -369,14 +370,14 @@
         const attackRange = clawAttack ? 31 : 47;
         enemies.forEach(enemy => { const toEnemyX = enemy.x - player.x, toEnemyY = enemy.y - player.y; const length = Math.hypot(toEnemyX, toEnemyY) || 1; if (length < attackRange && (toEnemyX * aim.x + toEnemyY * aim.y) / length > .45) damageEnemy(enemy, damage, clawAttack ? 'claws' : 'sword'); });
       }
-      playFile('swordSwing', null, clawAttack ? 1.2 : 2);
+      playFile('swordSwing', null, clawAttack ? .5 : 2);
     }
   }
 
   function damageEnemy(enemy, damage, source = 'projectile') {
     if (enemy.hp <= 0) return;
     enemy.hp -= damage; enemy.flash = .12; shake = Math.max(shake, 3);
-    if (source === 'sword' || source === 'claws') playFile('axeHit', null, 2); else playSfx('hit');
+    if (source === 'sword' || source === 'claws' || source === 'clawDrain') playFile('axeHit', null, source === 'claws' ? .5 : 2); else playSfx('hit');
     if (enemy.type === 'mage') playFile('painSharp', null, .65);
     if (enemy.type === 'spider') playFile('spiderPain', null, .75);
     floatingTexts.push({ x: enemy.x, y: enemy.y - 12, text: `-${damage}`, color: colors.gold, life: .7 });
@@ -387,12 +388,13 @@
       floatingTexts.push({ x: player.x, y: player.y - 17, text: `+${healing.toFixed(1)}`, color: colors.mint, life: .7 });
       burst(player.x, player.y, colors.mint, 4);
     }
+    if (source === 'claws') { enemy.clawDrain = true; enemy.clawDrainTimer = enemy.clawDrainTimer > 0 ? enemy.clawDrainTimer : 2; }
     if (enemy.hp <= 0) {
       const vaporizing = source === 'wand' || source === 'deflect';
       enemy.vaporizing = vaporizing; enemy.deathTimer = vaporizing ? 1.8 : 0; enemy.deathDuration = 1.8;
       score += enemy.type === 'boss' || enemy.type === 'minotaur' ? 700 : enemy.type === 'tank' ? 250 : enemy.type === 'mage' ? 150 : 100;
       coins += rand(3, 9); burst(enemy.x, enemy.y, colors.gold, enemy.type === 'boss' || enemy.type === 'minotaur' ? 30 : 13);
-      if (source === 'sword' && Math.random() > .3) playFile('enemyDeath', null, .25);
+      if ((source === 'sword' || source === 'claws' || source === 'clawDrain') && Math.random() > .3) playFile('enemyDeath', null, .25);
       if (source === 'wand' || source === 'deflect') playFile('enemyDissolve', null, .35);
       if (enemy.type === 'mage') playFile('painSevere', null, .8);
       if (enemy.type === 'spider') playFile('spiderDeath', null, .8);
@@ -483,12 +485,17 @@
     elapsed += dt; shake = Math.max(0, shake - dt * 18); player.slowTimer = Math.max(0, player.slowTimer - dt); const wasSpinning = player.spinTimer > 0; player.spinTimer = Math.max(0, player.spinTimer - dt); if (player.spinTimer > 0) { player.spinAngle += dt * 24; player.spinHitTimer -= dt; if (player.spinHitTimer <= 0) { player.spinHitTimer = .28; breakNearbyWebs(); enemies.forEach(enemy => { if (enemy.hp > 0 && Math.hypot(enemy.x - player.x, enemy.y - player.y) < 62) damageEnemy(enemy, weapons.blade.damage, 'sword'); }); } } else if (wasSpinning) playFile('spinEnd'); player.attackTimer = Math.max(0, player.attackTimer - dt); player.swingTimer = Math.max(0, player.swingTimer - dt); player.invuln = Math.max(0, player.invuln - dt); exit.pulse += dt;
     if (player.drawState) player.drawState.elapsed += dt;
     if (state !== 'playing') { updateParticles(dt); return; }
+    if (currentWeapon === 'claws' && !player.drawState) {
+      player.clawSelfDrainTimer -= dt;
+      if (player.clawSelfDrainTimer <= 0) { player.clawSelfDrainTimer = 2; hurtPlayer(1, 'clawSelfDrain'); if (state !== 'playing') return; }
+    } else if (currentWeapon !== 'claws') player.clawSelfDrainTimer = 2;
     updateWebs(dt);
     let dx = 0, dy = 0;
     if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
     if (keys.has('d') || keys.has('arrowright')) dx += 1;
     if (keys.has('w') || keys.has('arrowup')) dy -= 1;
     if (keys.has('s') || keys.has('arrowdown')) dy += 1;
+    if (touchMoveDirection) { dx += touchMoveDirection.x; dy += touchMoveDirection.y; }
     if (dx || dy) { const length = Math.hypot(dx, dy) || 1; dx /= length; dy /= length; const webSlow = webs.some(web => web.arming <= 0 && Math.hypot(web.x - player.x, web.y - player.y) < web.radius + 10); const chargeSlow = player.charging ? .3 : 1; const spinBoost = player.spinTimer > 0 ? 1.2 : 1; const movementScale = webSlow ? .45 : 1; moveEntity(player, dx * player.speed * movementScale * chargeSlow * spinBoost * dt, dy * player.speed * movementScale * chargeSlow * spinBoost * dt); }
     if (player.spinTimer > 0) { particles.push({ x: player.x - player.facing.x * 12 + rand(-3, 3), y: player.y - player.facing.y * 12 + rand(-3, 3), vx: -player.facing.x * 22 + rand(-16, 16), vy: -player.facing.y * 22 + rand(-16, 16), life: .22, color: Math.random() < .5 ? colors.gold : colors.cream, size: rand(2, 4) }); }
     updateCamera(); syncMouseWorld(); if (mouse.inside) updatePlayerAim();
@@ -513,11 +520,17 @@
       }
       enemy.flash = Math.max(0, enemy.flash - dt); enemy.hitTimer -= dt; enemy.wobble += dt * 4;
       enemy.shotTimer -= dt; enemy.webTimer -= dt; enemy.growlTimer -= dt;
+      if (enemy.type === 'minotaur') { enemy.chargeTimer = Math.max(0, enemy.chargeTimer - dt); enemy.chargeCooldown = Math.max(0, enemy.chargeCooldown - dt); }
+      if (enemy.clawDrain) {
+        enemy.clawDrainTimer -= dt;
+        if (enemy.clawDrainTimer <= 0) { enemy.clawDrainTimer = 2; damageEnemy(enemy, 1, 'clawDrain'); if (enemy.hp <= 0) return; }
+      }
       const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x), distance = dist(player, enemy);
       if (enemy.growlTimer <= 0 && distance < 280) { playSfx('monster'); enemy.growlTimer = rand(180, 420) / 100; }
       if (enemy.type === 'boss' || enemy.type === 'minotaur') {
         const minotaur = enemy.type === 'minotaur';
-        if (distance > (minotaur ? 52 : 46)) { const bossSpeed = minotaur && distance < 210 ? enemy.speed * 1.45 : enemy.speed; moveEnemySmart(enemy, Math.cos(angle), Math.sin(angle), dt, bossSpeed); }
+        if (minotaur && enemy.chargeTimer <= 0 && enemy.chargeCooldown <= 0 && distance > 52 && distance < 210) { enemy.chargeTimer = .75; enemy.chargeCooldown = 3.2; burst(enemy.x, enemy.y, colors.gold, 12); playSfx('monster'); }
+        if (distance > (minotaur ? 52 : 46)) { const charging = minotaur && enemy.chargeTimer > 0; const bossSpeed = charging ? enemy.speed * 3.2 : minotaur && distance < 210 ? enemy.speed * 1.45 : enemy.speed; moveEnemySmart(enemy, Math.cos(angle), Math.sin(angle), dt, bossSpeed); }
         if (!minotaur && distance < 360 && enemy.shotTimer <= 0) {
           [-.22, 0, .22].forEach(spread => projectiles.push({ owner: 'enemy', kind: 'boss', x: enemy.x, y: enemy.y, vx: Math.cos(angle + spread) * 170, vy: Math.sin(angle + spread) * 170, life: 2.2, damage: 2, color: colors.pink }));
           enemy.shotTimer = 2.15; burst(enemy.x, enemy.y, colors.pink, 9); playSfx('mage');
@@ -563,7 +576,7 @@
         projectile.life = 0;
       });
       if (projectile.owner === 'enemy' && deflectProjectile(projectile)) { /* The sword caught it; its new owner is player. */ }
-      if (projectile.owner === 'enemy' && Math.hypot(player.x - projectile.x, player.y - projectile.y) < 13) { hurtPlayer(projectile.damage, projectile.sourceType); projectile.life = 0; burst(projectile.x, projectile.y, colors.purple, 6); }
+      if (projectile.owner === 'enemy' && Math.hypot(player.x - projectile.x, player.y - projectile.y) < 13) { const incomingDamage = currentWeapon === 'claws' ? projectile.damage * 1.5 : projectile.damage; hurtPlayer(incomingDamage, projectile.sourceType); projectile.life = 0; burst(projectile.x, projectile.y, colors.purple, 6); }
       if (projectile.life <= 0) burstProjectile(projectile);
     });
     projectiles = projectiles.filter(projectile => projectile.life > 0);
@@ -741,13 +754,15 @@
     unlockAudio();
     currentWeapon = weapon;
     const token = ++weaponDrawToken;
-    player.drawState = { token, elapsed: 0, duration: .8 };
+    const clawDraw = weapon === 'claws';
+    player.drawState = { token, elapsed: 0, duration: clawDraw ? .2 : .8 };
     setTip(`Drawing ${weapons[weapon].name.toLowerCase()}...`);
     if (activeDrawAudio) { activeDrawAudio.pause(); activeDrawAudio.currentTime = 0; }
     const drawSound = weapon === 'wand' ? 'drawWand' : 'drawBlade';
-    activeDrawAudio = playFile(drawSound, () => finishWeaponDraw(token));
+    activeDrawAudio = playFile(drawSound, clawDraw ? null : () => finishWeaponDraw(token));
+    if (clawDraw) window.setTimeout(() => finishWeaponDraw(token), 200);
     activeDrawAudio.addEventListener('loadedmetadata', () => {
-      if (player?.drawState?.token === token && Number.isFinite(activeDrawAudio.duration)) player.drawState.duration = Math.max(.25, activeDrawAudio.duration);
+      if (!clawDraw && player?.drawState?.token === token && Number.isFinite(activeDrawAudio.duration)) player.drawState.duration = Math.max(.25, activeDrawAudio.duration);
     }, { once: true });
   }
 
@@ -797,6 +812,22 @@
     if (player) updatePlayerAim();
   }
 
+  function updateTouchMoveStick(event) {
+    const stick = document.getElementById('touchMoveStick');
+    const knob = document.getElementById('touchMoveKnob');
+    const bounds = stick.getBoundingClientRect();
+    const maxDistance = bounds.width * .31;
+    let dx = event.clientX - (bounds.left + bounds.width / 2);
+    let dy = event.clientY - (bounds.top + bounds.height / 2);
+    const distance = Math.hypot(dx, dy);
+    if (distance < 6) { touchMoveDirection = null; knob.style.transform = 'translate(0, 0)'; return; }
+    const scale = Math.min(1, maxDistance / distance);
+    dx *= scale; dy *= scale;
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    const moveLength = Math.hypot(dx, dy) || 1;
+    touchMoveDirection = { x: dx / moveLength, y: dy / moveLength };
+  }
+
   canvas.addEventListener('mousemove', setMousePosition);
   canvas.addEventListener('mouseenter', event => { setMousePosition(event); });
   canvas.addEventListener('mouseleave', () => { mouse.inside = false; mouse.down = false; });
@@ -825,12 +856,13 @@
   document.getElementById('musicButton').addEventListener('click', toggleMusic);
   document.getElementById('touchButton').addEventListener('click', toggleTouchControls);
   document.querySelectorAll('.weapon-card').forEach(card => card.addEventListener('click', () => selectWeapon(card.dataset.weapon)));
-  document.querySelectorAll('[data-move-key]').forEach(button => bindTouchHold(button, button.dataset.moveKey));
   document.querySelectorAll('[data-touch-weapon]').forEach(button => button.addEventListener('pointerdown', event => { event.preventDefault(); selectWeapon(button.dataset.touchWeapon); }));
   const touchAttack = document.getElementById('touchAttack');
   const touchDetonate = document.getElementById('touchDetonate');
   const touchAimStick = document.getElementById('touchAimStick');
   const touchAimKnob = document.getElementById('touchAimKnob');
+  const touchMoveStick = document.getElementById('touchMoveStick');
+  const touchMoveKnob = document.getElementById('touchMoveKnob');
   const releaseTouchAttack = event => { event.preventDefault(); touchAttackHeld = false; touchAttack.classList.remove('active'); releaseAttackCharge(); };
   touchAttack.addEventListener('pointerdown', event => { event.preventDefault(); touchAttack.setPointerCapture?.(event.pointerId); touchAttackHeld = true; touchAttack.classList.add('active'); beginAttackCharge(); });
   touchAttack.addEventListener('pointerup', releaseTouchAttack);
@@ -845,6 +877,12 @@
   touchAimStick.addEventListener('pointerup', resetTouchAimStick);
   touchAimStick.addEventListener('pointercancel', resetTouchAimStick);
   touchAimStick.addEventListener('lostpointercapture', resetTouchAimStick);
+  touchMoveStick.addEventListener('pointerdown', event => { event.preventDefault(); touchMoveStick.setPointerCapture?.(event.pointerId); updateTouchMoveStick(event); });
+  touchMoveStick.addEventListener('pointermove', event => { if (event.buttons || event.pressure) { event.preventDefault(); updateTouchMoveStick(event); } });
+  const resetTouchMoveStick = event => { event.preventDefault(); touchMoveDirection = null; touchMoveKnob.style.transform = 'translate(0, 0)'; };
+  touchMoveStick.addEventListener('pointerup', resetTouchMoveStick);
+  touchMoveStick.addEventListener('pointercancel', resetTouchMoveStick);
+  touchMoveStick.addEventListener('lostpointercapture', resetTouchMoveStick);
 
   function loop(timestamp) { const dt = Math.min((timestamp - lastTime) / 1000 || 0, .05); lastTime = timestamp; update(dt); draw(); requestAnimationFrame(loop); }
   newRun(); requestAnimationFrame(loop);

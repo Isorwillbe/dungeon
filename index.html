@@ -69,15 +69,13 @@
               <button id="resumeButton" class="pixel-button" type="button">RESUME <span>P</span></button>
             </div>
             <div id="touchControls" class="touch-controls" aria-label="Touch controls">
-              <div class="touch-dpad" aria-label="Movement">
-                <button class="touch-button touch-up" type="button" data-move-key="w" aria-label="Move up">▲</button>
-                <button class="touch-button touch-left" type="button" data-move-key="a" aria-label="Move left">◀</button>
-                <button class="touch-button touch-down" type="button" data-move-key="s" aria-label="Move down">▼</button>
-                <button class="touch-button touch-right" type="button" data-move-key="d" aria-label="Move right">▶</button>
+              <div id="touchMoveStick" class="touch-stick touch-move-stick" aria-label="Movement joystick">
+                <div class="touch-stick-label">MOVE</div>
+                <div id="touchMoveKnob" class="touch-stick-knob"></div>
               </div>
-              <div id="touchAimStick" class="touch-aim-stick" aria-label="Aim joystick">
-                <div class="touch-aim-label">AIM</div>
-                <div id="touchAimKnob" class="touch-aim-knob"></div>
+              <div id="touchAimStick" class="touch-stick touch-aim-stick" aria-label="Aim joystick">
+                <div class="touch-stick-label">AIM</div>
+                <div id="touchAimKnob" class="touch-stick-knob"></div>
               </div>
               <div class="touch-actions" aria-label="Combat controls">
                 <button class="touch-button touch-weapon" type="button" data-touch-weapon="blade">SWORD</button>

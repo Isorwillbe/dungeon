@@ -79,18 +79,14 @@ canvas { display: block; width: 100%; height: auto; aspect-ratio: 18 / 11; }
 .touch-controls-off .touch-controls { display: none !important; }
 .touch-button { appearance: none; -webkit-tap-highlight-color: transparent; user-select: none; touch-action: none; color: var(--cream); background: rgba(32, 27, 53, .96); border: 3px solid var(--cream); box-shadow: 4px 4px 0 rgba(10, 9, 18, .9); cursor: pointer; }
 .touch-button:active, .touch-button.active { color: var(--ink); background: var(--gold); transform: translate(2px, 2px); box-shadow: 2px 2px 0 rgba(10, 9, 18, .9); }
-.touch-dpad { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 44px); gap: 4px; pointer-events: auto; }
-.touch-dpad .touch-button { width: 50px; height: 44px; padding: 0; font-size: 18px; }
-.touch-up { grid-column: 2; grid-row: 1; }
-.touch-left { grid-column: 1; grid-row: 2; }
-.touch-down { grid-column: 2; grid-row: 3; }
-.touch-right { grid-column: 3; grid-row: 2; }
-.touch-aim-stick { position: absolute; right: 14px; bottom: 108px; display: grid; place-items: center; width: 104px; height: 104px; pointer-events: auto; touch-action: none; border: 3px solid var(--cream); border-radius: 50%; background: rgba(32, 27, 53, .78); box-shadow: 4px 4px 0 rgba(10, 9, 18, .9), inset 0 0 0 3px var(--line); }
-.touch-aim-stick::before, .touch-aim-stick::after { content: ''; position: absolute; background: var(--line); opacity: .75; }
-.touch-aim-stick::before { width: 70%; height: 2px; }
-.touch-aim-stick::after { width: 2px; height: 70%; }
-.touch-aim-label { position: absolute; top: 8px; color: var(--gold); font-size: 6px; letter-spacing: 1px; text-shadow: 2px 2px 0 #0a0912; z-index: 1; }
-.touch-aim-knob { position: relative; z-index: 2; width: 38px; height: 38px; border: 3px solid var(--gold); border-radius: 50%; background: rgba(255, 200, 87, .72); box-shadow: 3px 3px 0 rgba(10, 9, 18, .8); }
+.touch-stick { position: absolute; display: grid; place-items: center; width: 104px; height: 104px; pointer-events: auto; touch-action: none; border: 3px solid var(--cream); border-radius: 50%; background: rgba(32, 27, 53, .78); box-shadow: 4px 4px 0 rgba(10, 9, 18, .9), inset 0 0 0 3px var(--line); }
+.touch-move-stick { left: 14px; bottom: 14px; border-color: var(--mint); }
+.touch-aim-stick { left: 14px; top: 30px; }
+.touch-stick::before, .touch-stick::after { content: ''; position: absolute; background: var(--line); opacity: .75; }
+.touch-stick::before { width: 70%; height: 2px; }
+.touch-stick::after { width: 2px; height: 70%; }
+.touch-stick-label { position: absolute; top: 8px; color: var(--gold); font-size: 6px; letter-spacing: 1px; text-shadow: 2px 2px 0 #0a0912; z-index: 1; }
+.touch-stick-knob { position: relative; z-index: 2; width: 38px; height: 38px; border: 3px solid var(--gold); border-radius: 50%; background: rgba(255, 200, 87, .72); box-shadow: 3px 3px 0 rgba(10, 9, 18, .8); }
 .touch-actions { display: grid; grid-template-columns: repeat(2, minmax(58px, 1fr)); gap: 5px; min-width: 136px; pointer-events: auto; }
 .touch-actions .touch-button { min-width: 0; min-height: 45px; padding: 5px 6px; font-size: 7px; line-height: 1.35; }
 .touch-actions .touch-attack { min-height: 58px; color: var(--ink); background: var(--gold); border-color: var(--cream); font-size: 8px; }
@@ -153,12 +149,7 @@ canvas { display: block; width: 100%; height: auto; aspect-ratio: 18 / 11; }
   .canvas-wrap, .canvas-wrap canvas { touch-action: none; }
   .touch-controls { position: absolute; inset: 0; z-index: 2; display: flex; align-items: flex-end; justify-content: space-between; padding: 14px; pointer-events: none; }
   .touch-controls::before { content: 'TOUCH MODE'; position: absolute; top: 8px; left: 10px; color: var(--gold); font-size: 7px; letter-spacing: 1px; text-shadow: 2px 2px 0 #0a0912; }
-  .touch-dpad { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 44px); gap: 4px; pointer-events: auto; }
-  .touch-dpad .touch-button { width: 50px; height: 44px; padding: 0; font-size: 18px; }
-  .touch-up { grid-column: 2; grid-row: 1; }
-  .touch-left { grid-column: 1; grid-row: 2; }
-  .touch-down { grid-column: 2; grid-row: 3; }
-  .touch-right { grid-column: 3; grid-row: 2; }
+  .touch-stick { width: 104px; height: 104px; }
   .touch-actions { display: grid; grid-template-columns: repeat(2, minmax(58px, 1fr)); gap: 5px; min-width: 136px; pointer-events: auto; }
   .touch-actions .touch-button { min-width: 0; min-height: 45px; padding: 5px 6px; font-size: 7px; line-height: 1.35; }
   .touch-actions .touch-attack { min-height: 58px; color: var(--ink); background: var(--gold); border-color: var(--cream); font-size: 8px; }
@@ -171,10 +162,10 @@ canvas { display: block; width: 100%; height: auto; aspect-ratio: 18 / 11; }
   .weapon-list { grid-template-columns: 1fr; }
   h1 { font-size: 23px; }
   .touch-controls { padding: 8px; }
-  .touch-dpad { grid-template-columns: repeat(3, 39px); grid-template-rows: repeat(3, 35px); gap: 3px; }
-  .touch-dpad .touch-button { width: 39px; height: 35px; font-size: 14px; }
-  .touch-aim-stick { right: 8px; bottom: 96px; width: 82px; height: 82px; }
-  .touch-aim-knob { width: 30px; height: 30px; }
+  .touch-stick { width: 82px; height: 82px; }
+  .touch-move-stick { left: 8px; bottom: 8px; }
+  .touch-aim-stick { left: 8px; top: 28px; }
+  .touch-stick-knob { width: 30px; height: 30px; }
   .touch-actions { min-width: 118px; gap: 4px; }
   .touch-actions .touch-button { min-width: 0; min-height: 38px; padding: 4px; font-size: 6px; }
   .touch-actions .touch-attack { min-height: 49px; font-size: 7px; }
