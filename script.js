@@ -22,6 +22,7 @@
   let floor = 1, run = 0, score = 0, coins = 0, elapsed = 0, state = 'playing', lastTime = 0, shake = 0, levelSeed = 0;
   let mouse = { x: 0, y: 0, screenX: 0, screenY: 0, inside: false, down: false };
   let touchAimDirection = null;
+  let touchAttackHeld = false;
   let camera = { x: 0, y: 0 };
   let audioContext, musicTimer, musicStep = 0, musicMuted = false, touchControlsEnabled = true;
   let activeDrawAudio = null, weaponDrawToken = 0;
@@ -30,7 +31,8 @@
 
   const weapons = {
     blade: { name: 'IRON SWORD', damage: 5, cooldown: .34, color: colors.pink },
-    wand: { name: 'EMBER WAND', damage: 2, cooldown: .55, color: colors.mint }
+    wand: { name: 'EMBER WAND', damage: 2, cooldown: .55, color: colors.mint },
+    claws: { name: 'VAMPIRE CLAWS', damage: 1, cooldown: .18, color: '#d44d78' }
   };
 
   const soundFiles = {
@@ -52,7 +54,9 @@
     mageVoice: 'assets/magekilledu.wav',
     spiderWeb: 'assets/Spider_web.ogg',
     spiderPain: 'assets/Spider_pain.ogg',
-    spiderDeath: 'assets/Spider_death.ogg'
+    spiderDeath: 'assets/Spider_death.ogg',
+    meleeHit1: 'assets/eviction_notice_01.wav',
+    meleeHit2: 'assets/eviction_notice_02.wav'
   };
 
   function unlockAudio() {
@@ -216,17 +220,17 @@
   }
 
   function spawnEnemies() {
-    const amount = Math.min((8 + floor * 3) * 2, 36);
+    const amount = Math.min((8 + floor * 3) * 2, 80);
     const safe = { x: player.x / TILE, y: player.y / TILE };
     const candidates = [];
     for (let y = 1; y < ROWS - 1; y += 1) for (let x = 1; x < COLS - 1; x += 1) if (map[y][x] && Math.hypot(x - safe.x, y - safe.y) > 7) candidates.push({ x, y });
     for (let i = 0; i < amount && candidates.length; i += 1) {
       const spot = candidates.splice(rand(0, candidates.length - 1), 1)[0];
-      const type = i === 0 ? 'mage' : i === 1 ? 'tank' : i === amount - 1 ? 'boss' : choice(['skull', 'slime', 'bat', 'brute', 'wraith', 'mage', 'tank', 'spider', 'golem', 'imp']);
-      const stats = { boss: [19, 1.4], mage: [28, 1.25], tank: [17, 1.2], golem: [14, 1.35], brute: [22, 1.05], wraith: [57, .62], spider: [65, .65], bat: [43, .78], imp: [50, .7], slime: [25, .9], skull: [34, .82] }[type];
-      const maxHp = type === 'boss' ? 28 + floor * 8 : type === 'tank' ? 14 : type === 'golem' ? 10 : 5;
-      const size = type === 'boss' ? 28 : type === 'tank' || type === 'golem' ? 20 : 15;
-      enemies.push({ x: (spot.x + .5) * TILE, y: (spot.y + .5) * TILE, w: size, h: size, hp: maxHp, maxHp, speed: stats[0] + floor * 2, damage: type === 'boss' ? 3 : type === 'tank' || type === 'golem' || type === 'brute' ? 2 : 1, hitTimer: rand(0, 60) / 100, shotTimer: rand(30, 120) / 100, webTimer: rand(180, 330) / 100, growlTimer: rand(140, 360) / 100, flash: 0, wobble: Math.random() * 6, type });
+      const type = i === 0 ? 'mage' : i === 1 ? 'tank' : i === amount - 1 ? choice(['boss', 'minotaur']) : choice(['skull', 'slime', 'bat', 'brute', 'wraith', 'mage', 'tank', 'spider', 'golem', 'imp', 'charger', 'necromancer']);
+      const stats = { boss: [19, 1.4], minotaur: [25, 1.6], mage: [28, 1.25], tank: [17, 1.2], golem: [14, 1.35], brute: [22, 1.05], wraith: [57, .62], spider: [65, .65], bat: [43, .78], imp: [50, .7], slime: [25, .9], skull: [34, .82], charger: [78, .65], necromancer: [24, 1.45] }[type];
+      const maxHp = type === 'boss' ? 28 + floor * 8 : type === 'minotaur' ? 36 + floor * 10 : type === 'tank' ? 14 : type === 'golem' ? 10 : type === 'necromancer' ? 9 : type === 'charger' ? 8 : 5;
+      const size = type === 'boss' ? 28 : type === 'minotaur' ? 32 : type === 'tank' || type === 'golem' ? 20 : type === 'charger' ? 18 : 15;
+      enemies.push({ x: (spot.x + .5) * TILE, y: (spot.y + .5) * TILE, w: size, h: size, hp: maxHp, maxHp, speed: stats[0] + floor * 2, damage: type === 'boss' ? 3 : type === 'minotaur' ? 4 : type === 'tank' || type === 'golem' || type === 'brute' || type === 'charger' ? 2 : 1, hitTimer: rand(0, 60) / 100, shotTimer: rand(30, 120) / 100, webTimer: rand(180, 330) / 100, growlTimer: rand(140, 360) / 100, flash: 0, wobble: Math.random() * 6, steerSide: Math.random() < .5 ? -1 : 1, pathTimer: 0, pathDir: null, type });
     }
   }
 
@@ -245,6 +249,46 @@
   function moveEntity(entity, dx, dy) {
     if (canMove(entity, dx, 0)) entity.x += dx;
     if (canMove(entity, 0, dy)) entity.y += dy;
+  }
+
+  function findEnemyPathStep(enemy) {
+    const startX = Math.floor(enemy.x / TILE), startY = Math.floor(enemy.y / TILE);
+    const targetX = Math.floor(player.x / TILE), targetY = Math.floor(player.y / TILE);
+    if (startX === targetX && startY === targetY) return null;
+    if (startX < 0 || startY < 0 || targetX < 0 || targetY < 0 || startX >= COLS || startY >= ROWS || targetX >= COLS || targetY >= ROWS) return null;
+    const start = startY * COLS + startX, target = targetY * COLS + targetX;
+    const cameFrom = new Int32Array(COLS * ROWS); cameFrom.fill(-2); cameFrom[start] = -1;
+    const queue = new Int32Array(COLS * ROWS); let head = 0, tail = 0; queue[tail++] = start;
+    const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    while (head < tail) {
+      const current = queue[head++];
+      if (current === target) break;
+      const currentX = current % COLS, currentY = Math.floor(current / COLS);
+      directions.forEach(([dx, dy]) => {
+        const nextX = currentX + dx, nextY = currentY + dy;
+        if (nextX < 1 || nextY < 1 || nextX >= COLS - 1 || nextY >= ROWS - 1 || !map[nextY][nextX]) return;
+        const next = nextY * COLS + nextX;
+        if (cameFrom[next] === -2) { cameFrom[next] = current; queue[tail++] = next; }
+      });
+    }
+    if (cameFrom[target] === -2) return null;
+    let step = target;
+    while (cameFrom[step] !== start && cameFrom[step] !== -1) step = cameFrom[step];
+    return { x: (step % COLS) - startX, y: Math.floor(step / COLS) - startY };
+  }
+
+  function moveEnemySmart(enemy, dx, dy, dt, speed = enemy.speed) {
+    const desiredAngle = Math.atan2(dy, dx);
+    const stepDistance = speed * dt;
+    enemy.pathTimer -= dt;
+    if (enemy.pathTimer <= 0) { enemy.pathDir = findEnemyPathStep(enemy); enemy.pathTimer = .3 + Math.random() * .18; }
+    const pathAngle = enemy.pathDir ? Math.atan2(enemy.pathDir.y, enemy.pathDir.x) : desiredAngle;
+    const angles = [desiredAngle, desiredAngle + enemy.steerSide * .65, desiredAngle - enemy.steerSide * .65, pathAngle, pathAngle + enemy.steerSide * .9, pathAngle - enemy.steerSide * .9];
+    for (const candidateAngle of angles) {
+      const vx = Math.cos(candidateAngle) * stepDistance, vy = Math.sin(candidateAngle) * stepDistance;
+      if (canMove(enemy, vx, vy)) { moveEntity(enemy, vx, vy); return; }
+    }
+    moveEntity(enemy, Math.cos(desiredAngle) * stepDistance * .45, Math.sin(desiredAngle) * stepDistance * .45);
   }
 
   function updateCamera() {
@@ -285,7 +329,9 @@
 
   function beginAttackCharge() {
     if (state !== 'playing' || player.attackTimer > 0 || player.drawState || player.charging) return;
-    unlockAudio(); player.charging = true; player.charge = 0;
+    unlockAudio();
+    if (currentWeapon === 'claws') { attack(0); return; }
+    player.charging = true; player.charge = 0;
   }
 
   function releaseAttackCharge() {
@@ -303,41 +349,49 @@
     const chargeSeconds = charge * MAX_CHARGE;
     const charged = chargeSeconds >= MIN_SPIN_CHARGE;
     const spinAttack = currentWeapon === 'blade' && chargeSeconds >= MIN_SPIN_CHARGE;
-    player.attackTimer = weapon.cooldown; player.swingTimer = currentWeapon === 'blade' ? (spinAttack ? .3 : .16) : 0;
+    player.attackTimer = weapon.cooldown; player.swingTimer = currentWeapon === 'blade' ? (spinAttack ? .3 : .16) : currentWeapon === 'claws' ? .12 : 0;
     if (currentWeapon === 'wand') {
       const blueCharge = chargeSeconds > MIN_SPIN_CHARGE;
-      const damage = Math.round(weapon.damage * (1 + charge * 2.2));
+      const damage = Math.round(weapon.damage * (1 + charge * 2.2)) + (charged ? 1 : 0);
       const blastRadius = WAND_BLAST_RADIUS + charge * 26;
       projectiles.push({ owner: 'player', kind: 'wand', superShot: charged, blueCharge, blastRadius, x: player.x + aim.x * 12, y: player.y + aim.y * 12, vx: aim.x * (charged ? 340 : 270), vy: aim.y * (charged ? 340 : 270), life: charged ? 1.1 : .8, damage, color: blueCharge ? colors.blue : weapon.color });
       burst(player.x + aim.x * 10, player.y + aim.y * 10, weapon.color, charged ? 12 : 5); playFile(charged ? 'wandSuperFire' : 'wandFire');
     } else {
-      const damage = Math.round(weapon.damage * (1 + charge * 1.2));
+      const clawAttack = currentWeapon === 'claws';
+      const damage = clawAttack ? weapon.damage : Math.round(weapon.damage * (1 + charge * 1.2));
       const hitX = player.x + aim.x * 22, hitY = player.y + aim.y * 22;
-      burst(hitX, hitY, weapon.color, charged ? 16 : 7); breakNearbyWebs();
+      burst(hitX, hitY, weapon.color, clawAttack ? 5 : charged ? 16 : 7); if (!clawAttack) breakNearbyWebs();
       if (spinAttack) {
         const spinProgress = clamp((chargeSeconds - MIN_SPIN_CHARGE) / (MAX_CHARGE - MIN_SPIN_CHARGE), 0, 1);
         player.spinTimer = 1 + spinProgress * 1.2; player.spinAngle = 0; player.spinHitTimer = 0;
         playFile('spinStart');
       } else {
-        enemies.forEach(enemy => { const toEnemyX = enemy.x - player.x, toEnemyY = enemy.y - player.y; const length = Math.hypot(toEnemyX, toEnemyY) || 1; if (length < 47 && (toEnemyX * aim.x + toEnemyY * aim.y) / length > .45) damageEnemy(enemy, damage, 'sword'); });
+        const attackRange = clawAttack ? 31 : 47;
+        enemies.forEach(enemy => { const toEnemyX = enemy.x - player.x, toEnemyY = enemy.y - player.y; const length = Math.hypot(toEnemyX, toEnemyY) || 1; if (length < attackRange && (toEnemyX * aim.x + toEnemyY * aim.y) / length > .45) damageEnemy(enemy, damage, clawAttack ? 'claws' : 'sword'); });
       }
-      playFile('swordSwing', null, 2);
+      playFile('swordSwing', null, clawAttack ? 1.2 : 2);
     }
   }
 
   function damageEnemy(enemy, damage, source = 'projectile') {
     if (enemy.hp <= 0) return;
     enemy.hp -= damage; enemy.flash = .12; shake = Math.max(shake, 3);
-    if (source === 'sword') playFile('axeHit', null, 2); else playSfx('hit');
+    if (source === 'sword' || source === 'claws') playFile('axeHit', null, 2); else playSfx('hit');
     if (enemy.type === 'mage') playFile('painSharp', null, .65);
     if (enemy.type === 'spider') playFile('spiderPain', null, .75);
     floatingTexts.push({ x: enemy.x, y: enemy.y - 12, text: `-${damage}`, color: colors.gold, life: .7 });
     burst(enemy.x, enemy.y, colors.pink, 4);
+    if (source === 'claws' && player.hp < player.maxHp) {
+      const healing = Math.min(.5, player.maxHp - player.hp);
+      player.hp += healing;
+      floatingTexts.push({ x: player.x, y: player.y - 17, text: `+${healing.toFixed(1)}`, color: colors.mint, life: .7 });
+      burst(player.x, player.y, colors.mint, 4);
+    }
     if (enemy.hp <= 0) {
       const vaporizing = source === 'wand' || source === 'deflect';
       enemy.vaporizing = vaporizing; enemy.deathTimer = vaporizing ? 1.8 : 0; enemy.deathDuration = 1.8;
-      score += enemy.type === 'boss' ? 700 : enemy.type === 'tank' ? 250 : enemy.type === 'mage' ? 150 : 100;
-      coins += rand(3, 9); burst(enemy.x, enemy.y, colors.gold, enemy.type === 'boss' ? 30 : 13);
+      score += enemy.type === 'boss' || enemy.type === 'minotaur' ? 700 : enemy.type === 'tank' ? 250 : enemy.type === 'mage' ? 150 : 100;
+      coins += rand(3, 9); burst(enemy.x, enemy.y, colors.gold, enemy.type === 'boss' || enemy.type === 'minotaur' ? 30 : 13);
       if (source === 'sword' && Math.random() > .3) playFile('enemyDeath', null, .25);
       if (source === 'wand' || source === 'deflect') playFile('enemyDissolve', null, .35);
       if (enemy.type === 'mage') playFile('painSevere', null, .8);
@@ -345,9 +399,10 @@
     }
   }
 
-  function hurtPlayer(amount, sourceType = '') {
-    if (player.invuln > 0 || state !== 'playing') return;
+  function hurtPlayer(amount, sourceType = '', melee = false) {
+    if (player.invuln > 0 || player.spinTimer > 0 || state !== 'playing') return;
     player.hp = Math.max(0, player.hp - amount); player.invuln = .65; shake = 7; playSfx('hurt'); playFile('critReceived', null, .75);
+    if (melee) playFile(Math.random() < .5 ? 'meleeHit1' : 'meleeHit2', null, .8);
     floatingTexts.push({ x: player.x, y: player.y - 15, text: `-${amount}`, color: colors.pink, life: .8 });
     burst(player.x, player.y, colors.pink, 7);
     if (player.hp <= 0) { if (sourceType === 'mage') playFile('mageVoice', null, .75); endGame(false); }
@@ -359,8 +414,14 @@
     burst(projectile.x, projectile.y, colors.mint, 28);
     burst(projectile.x, projectile.y, colors.cream, 14);
     explosions.push({ x: projectile.x, y: projectile.y, life: .34, duration: .34 });
+    const blastRadius = projectile.blastRadius || WAND_BLAST_RADIUS;
     enemies.forEach(enemy => {
-      if (enemy.hp > 0 && Math.hypot(enemy.x - projectile.x, enemy.y - projectile.y) <= (projectile.blastRadius || WAND_BLAST_RADIUS)) damageEnemy(enemy, projectile.damage, 'wand');
+      const distance = Math.hypot(enemy.x - projectile.x, enemy.y - projectile.y);
+      if (enemy.hp > 0 && distance <= blastRadius) {
+        const distanceRatio = clamp(distance / blastRadius, 0, 1);
+        const falloff = .35 + .65 * (1 - distanceRatio);
+        damageEnemy(enemy, Math.max(1, Math.round(projectile.damage * falloff)), 'wand');
+      }
     });
     playFile('explosion', null, .25);
   }
@@ -432,8 +493,15 @@
     if (player.spinTimer > 0) { particles.push({ x: player.x - player.facing.x * 12 + rand(-3, 3), y: player.y - player.facing.y * 12 + rand(-3, 3), vx: -player.facing.x * 22 + rand(-16, 16), vy: -player.facing.y * 22 + rand(-16, 16), life: .22, color: Math.random() < .5 ? colors.gold : colors.cream, size: rand(2, 4) }); }
     updateCamera(); syncMouseWorld(); if (mouse.inside) updatePlayerAim();
     if (pressed.has('x')) detonateWand();
-    const attackHeld = keys.has('space') || mouse.down;
-    if (attackHeld) { if (!player.charging) beginAttackCharge(); player.charge = Math.min(MAX_CHARGE, player.charge + dt); }
+    const attackHeld = keys.has('space') || mouse.down || touchAttackHeld;
+    if (attackHeld) {
+      if (currentWeapon === 'claws') {
+        player.charging = false; player.charge = 0;
+        if (player.attackTimer <= 0) attack(0);
+      } else {
+        if (!player.charging) beginAttackCharge(); player.charge = Math.min(MAX_CHARGE, player.charge + dt);
+      }
+    }
     else if (player.charging) releaseAttackCharge();
     enemies.forEach(enemy => {
       if (enemy.hp <= 0) {
@@ -447,27 +515,34 @@
       enemy.shotTimer -= dt; enemy.webTimer -= dt; enemy.growlTimer -= dt;
       const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x), distance = dist(player, enemy);
       if (enemy.growlTimer <= 0 && distance < 280) { playSfx('monster'); enemy.growlTimer = rand(180, 420) / 100; }
-      if (enemy.type === 'boss') {
-        if (distance > 46) moveEntity(enemy, Math.cos(angle) * enemy.speed * dt, Math.sin(angle) * enemy.speed * dt);
-        if (distance < 360 && enemy.shotTimer <= 0) {
+      if (enemy.type === 'boss' || enemy.type === 'minotaur') {
+        const minotaur = enemy.type === 'minotaur';
+        if (distance > (minotaur ? 52 : 46)) { const bossSpeed = minotaur && distance < 210 ? enemy.speed * 1.45 : enemy.speed; moveEnemySmart(enemy, Math.cos(angle), Math.sin(angle), dt, bossSpeed); }
+        if (!minotaur && distance < 360 && enemy.shotTimer <= 0) {
           [-.22, 0, .22].forEach(spread => projectiles.push({ owner: 'enemy', kind: 'boss', x: enemy.x, y: enemy.y, vx: Math.cos(angle + spread) * 170, vy: Math.sin(angle + spread) * 170, life: 2.2, damage: 2, color: colors.pink }));
           enemy.shotTimer = 2.15; burst(enemy.x, enemy.y, colors.pink, 9); playSfx('mage');
         }
       } else if (enemy.type === 'mage') {
-        if (distance > 185) moveEntity(enemy, Math.cos(angle) * enemy.speed * dt, Math.sin(angle) * enemy.speed * dt);
-        else if (distance < 110) moveEntity(enemy, -Math.cos(angle) * enemy.speed * dt, -Math.sin(angle) * enemy.speed * dt);
+        if (distance > 185) moveEnemySmart(enemy, Math.cos(angle), Math.sin(angle), dt);
+        else if (distance < 110) moveEnemySmart(enemy, -Math.cos(angle), -Math.sin(angle), dt);
         if (distance < 340 && enemy.shotTimer <= 0) { projectiles.push({ owner: 'enemy', sourceType: 'mage', x: enemy.x, y: enemy.y, vx: Math.cos(angle) * 145, vy: Math.sin(angle) * 145, life: 2.2, damage: 1, color: colors.purple }); enemy.shotTimer = 1.7; burst(enemy.x, enemy.y, colors.purple, 5); playSfx('mage'); }
+      } else if (enemy.type === 'charger') {
+        if (distance > 25) { const chargeSpeed = distance < 150 ? enemy.speed * 1.35 : enemy.speed; moveEnemySmart(enemy, Math.cos(angle), Math.sin(angle), dt, chargeSpeed); }
+      } else if (enemy.type === 'necromancer') {
+        if (distance > 220) moveEnemySmart(enemy, Math.cos(angle), Math.sin(angle), dt);
+        else if (distance < 135) moveEnemySmart(enemy, -Math.cos(angle), -Math.sin(angle), dt);
+        if (distance < 370 && enemy.shotTimer <= 0) { [-.16, .16].forEach(spread => projectiles.push({ owner: 'enemy', sourceType: 'necromancer', kind: 'necromancerBolt', x: enemy.x, y: enemy.y, vx: Math.cos(angle + spread) * 125, vy: Math.sin(angle + spread) * 125, life: 2.6, damage: 1, color: '#b087f0' })); enemy.shotTimer = 2.4; burst(enemy.x, enemy.y, '#b087f0', 8); playSfx('mage'); }
       } else if (enemy.type === 'spider') {
-        if (distance > 28) moveEntity(enemy, Math.cos(angle) * enemy.speed * dt, Math.sin(angle) * enemy.speed * dt);
+        if (distance > 28) moveEnemySmart(enemy, Math.cos(angle), Math.sin(angle), dt);
         if (distance < 330 && enemy.webTimer <= 0) {
           projectiles.push({ owner: 'enemy', kind: 'webProjectile', x: enemy.x, y: enemy.y, vx: Math.cos(angle) * 135, vy: Math.sin(angle) * 135, life: 2.4, damage: 0, color: '#d9cee5' });
           enemy.webTimer = 2.8; playSfx('web'); playFile('spiderWeb', null, .75);
         }
       } else {
-        if (distance > 28) moveEntity(enemy, Math.cos(angle) * enemy.speed * dt, Math.sin(angle) * enemy.speed * dt);
+        if (distance > 28) moveEnemySmart(enemy, Math.cos(angle), Math.sin(angle), dt);
       }
-      const contactDistance = enemy.type === 'boss' ? 40 : enemy.type === 'tank' || enemy.type === 'golem' ? 32 : 28;
-      if (distance <= contactDistance && enemy.hitTimer <= 0) { playSfx('monster'); hurtPlayer(enemy.damage, enemy.type); enemy.hitTimer = enemy.type === 'boss' || enemy.type === 'brute' || enemy.type === 'tank' ? 1.15 : .85; }
+      const contactDistance = enemy.type === 'boss' ? 40 : enemy.type === 'minotaur' ? 52 : enemy.type === 'tank' || enemy.type === 'golem' ? 32 : enemy.type === 'charger' ? 31 : 28;
+      if (distance <= contactDistance && enemy.hitTimer <= 0) { playSfx('monster'); hurtPlayer(enemy.damage, enemy.type, true); enemy.hitTimer = enemy.type === 'boss' || enemy.type === 'minotaur' || enemy.type === 'brute' || enemy.type === 'tank' ? 1.15 : .85; }
     });
     projectiles.forEach(projectile => {
       projectile.x += projectile.vx * dt; projectile.y += projectile.vy * dt; projectile.life -= dt;
@@ -546,7 +621,7 @@
     ctx.fillStyle = 'rgba(0,0,0,.32)'; ctx.fillRect(-9, 8, 18, 4);
     ctx.fillStyle = colors.gold; ctx.fillRect(-6, -10, 12, 5); ctx.fillRect(-9, -6, 18, 8); ctx.fillStyle = '#dd875d'; ctx.fillRect(-5, -2, 10, 7); ctx.fillStyle = colors.ink; ctx.fillRect(-7, 5, 5, 6); ctx.fillRect(2, 5, 5, 6);
     const drawProgress = player.drawState ? clamp(player.drawState.elapsed / player.drawState.duration, 0, 1) : 1;
-    const swingDuration = player.swingTimer > .16 ? .3 : .16;
+    const swingDuration = currentWeapon === 'blade' ? (player.swingTimer > .16 ? .3 : .16) : currentWeapon === 'claws' ? .12 : .16;
     const swingProgress = player.swingTimer > 0 ? 1 - player.swingTimer / swingDuration : 1;
     const swingRotation = player.swingTimer > 0 ? -.9 + swingProgress * 1.8 : 0;
     ctx.save(); ctx.rotate(player.aimAngle + swingRotation); ctx.translate((1 - drawProgress) * -24, 0); ctx.globalAlpha = .35 + drawProgress * .65;
@@ -555,8 +630,10 @@
       ctx.fillStyle = '#e6d3b0'; ctx.beginPath(); ctx.moveTo(13, -3); ctx.lineTo(32, -3); ctx.lineTo(37, 0); ctx.lineTo(32, 3); ctx.lineTo(13, 3); ctx.closePath(); ctx.fill();
       ctx.fillStyle = colors.cream; ctx.fillRect(16, -2, 15, 1);
       if (player.swingTimer > 0) { ctx.globalAlpha = player.swingTimer / swingDuration; ctx.strokeStyle = colors.pink; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 34, -.75, .75); ctx.stroke(); }
-    } else {
+    } else if (currentWeapon === 'wand') {
       ctx.fillStyle = '#8c5a42'; ctx.fillRect(6, -2, 17, 4); ctx.fillStyle = colors.mint; ctx.fillRect(21, -4, 5, 8); ctx.fillStyle = colors.gold; ctx.fillRect(8, -4, 3, 8);
+    } else {
+      if (player.swingTimer > 0) { ctx.globalAlpha = player.swingTimer / swingDuration; ctx.strokeStyle = colors.pink; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 31, -.75, .75); ctx.stroke(); }
     }
     ctx.restore();
     if (player.charging) { const ratio = clamp(player.charge / MAX_CHARGE, 0, 1); ctx.globalAlpha = .9; ctx.fillStyle = '#1b1529'; ctx.fillRect(-18, -28, 36, 5); ctx.fillStyle = currentWeapon === 'blade' && player.charge >= MIN_SPIN_CHARGE ? colors.red : currentWeapon === 'wand' && player.charge > MIN_SPIN_CHARGE ? colors.blue : currentWeapon === 'wand' ? colors.mint : colors.gold; ctx.fillRect(-17, -27, 34 * ratio, 3); }
@@ -566,7 +643,10 @@
   function drawEnemySilhouette(enemy, fill) {
     ctx.fillStyle = fill;
     if (enemy.type === 'boss') { ctx.fillRect(-15, -13, 30, 25); ctx.fillRect(-10, -18, 20, 5); ctx.fillRect(-19, -8, 4, 15); ctx.fillRect(15, -8, 4, 15); }
+    else if (enemy.type === 'minotaur') { ctx.fillRect(-15, -11, 30, 22); ctx.fillRect(-11, -17, 22, 8); ctx.fillRect(-21, -18, 8, 5); ctx.fillRect(13, -18, 8, 5); ctx.fillRect(-11, 11, 7, 8); ctx.fillRect(4, 11, 7, 8); }
     else if (enemy.type === 'mage') { ctx.fillRect(-9, -3, 18, 12); ctx.fillRect(-6, -9, 12, 6); ctx.fillRect(-10, -10, 20, 3); ctx.fillRect(-4, -14, 3, 5); }
+    else if (enemy.type === 'charger') { ctx.fillRect(-10, -7, 20, 16); ctx.fillRect(-7, -12, 14, 5); ctx.fillRect(-12, -12, 4, 7); ctx.fillRect(8, -12, 4, 7); }
+    else if (enemy.type === 'necromancer') { ctx.fillRect(-9, -2, 18, 12); ctx.fillRect(-8, -10, 16, 8); ctx.fillRect(10, -13, 2, 25); ctx.fillRect(8, -14, 6, 3); }
     else if (enemy.type === 'tank') { ctx.fillRect(-12, -9, 24, 18); ctx.fillRect(-9, -13, 18, 4); ctx.fillRect(-14, -5, 3, 10); ctx.fillRect(11, -5, 3, 10); }
     else if (enemy.type === 'golem') { ctx.fillRect(-11, -9, 22, 18); ctx.fillRect(-8, -13, 16, 4); ctx.fillRect(-15, -4, 4, 8); ctx.fillRect(11, -4, 4, 8); }
     else if (enemy.type === 'brute') { ctx.fillRect(-10, -7, 20, 16); ctx.fillRect(-7, -11, 14, 4); }
@@ -593,9 +673,12 @@
   function drawEnemy(enemy) {
     if (enemy.hp <= 0) { if (enemy.vaporizing && enemy.deathTimer > 0) drawVaporizingEnemy(enemy); return; }
     ctx.save(); ctx.translate(Math.round(enemy.x), Math.round(enemy.y + Math.sin(enemy.wobble) * 1.5));
-    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-14, 12, 28, 3); ctx.fillStyle = enemy.flash ? colors.cream : ({ boss: '#b74765', mage: colors.purple, tank: '#c17b52', golem: '#8b8293', brute: '#e68c67', wraith: '#70c7d8', spider: '#bd6c96', bat: colors.pink, imp: '#df6b4e', slime: colors.mint, skull: colors.pink }[enemy.type]);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-16, 15, 32, 4); ctx.fillStyle = enemy.flash ? colors.cream : ({ boss: '#b74765', minotaur: '#9d5148', mage: colors.purple, tank: '#c17b52', golem: '#8b8293', brute: '#e68c67', wraith: '#70c7d8', spider: '#bd6c96', bat: colors.pink, imp: '#df6b4e', slime: colors.mint, skull: colors.pink, charger: '#d94f63', necromancer: '#b087f0' }[enemy.type]);
     if (enemy.type === 'boss') { ctx.fillRect(-15, -13, 30, 25); ctx.fillRect(-10, -18, 20, 5); ctx.fillRect(-19, -8, 4, 15); ctx.fillRect(15, -8, 4, 15); ctx.fillStyle = colors.gold; ctx.fillRect(-8, -6, 5, 5); ctx.fillRect(4, -6, 5, 5); ctx.fillStyle = colors.ink; ctx.fillRect(-7, -5, 2, 3); ctx.fillRect(5, -5, 2, 3); }
+    else if (enemy.type === 'minotaur') { ctx.fillRect(-13, -9, 26, 21); ctx.fillRect(-10, -15, 20, 8); ctx.fillStyle = colors.cream; ctx.fillRect(-20, -17, 9, 4); ctx.fillRect(11, -17, 9, 4); ctx.fillStyle = colors.gold; ctx.fillRect(-7, -4, 4, 4); ctx.fillRect(3, -4, 4, 4); ctx.fillStyle = colors.ink; ctx.fillRect(-6, -3, 2, 2); ctx.fillRect(4, -3, 2, 2); ctx.fillStyle = '#5d3437'; ctx.fillRect(-10, 12, 7, 8); ctx.fillRect(3, 12, 7, 8); }
     else if (enemy.type === 'mage') { ctx.fillRect(-9, -3, 18, 12); ctx.fillRect(-6, -9, 12, 6); ctx.fillStyle = colors.ink; ctx.fillRect(-10, -10, 20, 3); ctx.fillRect(-4, -14, 3, 5); ctx.fillStyle = colors.gold; ctx.fillRect(4, -4, 3, 3); }
+    else if (enemy.type === 'charger') { ctx.fillRect(-10, -7, 20, 16); ctx.fillRect(-7, -12, 14, 5); ctx.fillStyle = colors.gold; ctx.fillRect(-12, -12, 4, 7); ctx.fillRect(8, -12, 4, 7); ctx.fillStyle = colors.ink; ctx.fillRect(-5, -3, 3, 3); ctx.fillRect(2, -3, 3, 3); }
+    else if (enemy.type === 'necromancer') { ctx.fillRect(-9, -2, 18, 12); ctx.fillRect(-8, -10, 16, 8); ctx.fillStyle = colors.ink; ctx.fillRect(-4, -4, 3, 3); ctx.fillRect(2, -4, 3, 3); ctx.fillStyle = colors.gold; ctx.fillRect(10, -13, 2, 25); ctx.fillRect(8, -14, 6, 3); }
     else if (enemy.type === 'tank') { ctx.fillRect(-12, -9, 24, 18); ctx.fillRect(-9, -13, 18, 4); ctx.fillStyle = '#6b4850'; ctx.fillRect(-14, -5, 3, 10); ctx.fillRect(11, -5, 3, 10); ctx.fillStyle = colors.gold; ctx.fillRect(-6, -4, 4, 3); ctx.fillRect(3, -4, 4, 3); }
     else if (enemy.type === 'golem') { ctx.fillRect(-11, -9, 22, 18); ctx.fillRect(-8, -13, 16, 4); ctx.fillStyle = colors.ink; ctx.fillRect(-6, -4, 4, 4); ctx.fillRect(3, -4, 4, 4); ctx.fillStyle = '#b8aabc'; ctx.fillRect(-15, -4, 4, 8); ctx.fillRect(11, -4, 4, 8); }
     else if (enemy.type === 'brute') { ctx.fillRect(-10, -7, 20, 16); ctx.fillRect(-7, -11, 14, 4); ctx.fillStyle = colors.ink; ctx.fillRect(-6, -3, 4, 4); ctx.fillRect(3, -3, 4, 4); }
@@ -605,9 +688,9 @@
     else if (enemy.type === 'imp') { ctx.fillRect(-7, -4, 14, 12); ctx.fillRect(-5, -9, 10, 5); ctx.fillStyle = colors.ink; ctx.fillRect(-4, -3, 3, 3); ctx.fillRect(2, -3, 3, 3); ctx.fillStyle = colors.gold; ctx.fillRect(-9, -12, 3, 5); ctx.fillRect(6, -12, 3, 5); }
     else if (enemy.type === 'slime') { ctx.fillRect(-8, -4, 16, 12); ctx.fillRect(-5, -8, 10, 4); }
     else { ctx.fillRect(-8, -8, 16, 16); ctx.fillRect(-5, -11, 10, 3); }
-    if (enemy.type !== 'boss' && enemy.type !== 'brute' && enemy.type !== 'tank' && enemy.type !== 'golem' && enemy.type !== 'mage' && enemy.type !== 'wraith' && enemy.type !== 'spider' && enemy.type !== 'imp') { ctx.fillStyle = colors.ink; ctx.fillRect(-5, -3, 3, 4); ctx.fillRect(2, -3, 3, 4); }
+    if (enemy.type !== 'boss' && enemy.type !== 'minotaur' && enemy.type !== 'brute' && enemy.type !== 'tank' && enemy.type !== 'golem' && enemy.type !== 'mage' && enemy.type !== 'charger' && enemy.type !== 'necromancer' && enemy.type !== 'wraith' && enemy.type !== 'spider' && enemy.type !== 'imp') { ctx.fillStyle = colors.ink; ctx.fillRect(-5, -3, 3, 4); ctx.fillRect(2, -3, 3, 4); }
     ctx.restore();
-    const barWidth = enemy.type === 'boss' ? 42 : enemy.type === 'tank' || enemy.type === 'golem' ? 28 : 20; const barY = enemy.type === 'boss' ? enemy.y - 28 : enemy.y - 20; ctx.fillStyle = '#1b1529'; ctx.fillRect(enemy.x - barWidth / 2, barY, barWidth, 3); ctx.fillStyle = enemy.type === 'boss' ? '#b74765' : enemy.type === 'mage' ? colors.purple : enemy.type === 'tank' || enemy.type === 'golem' ? '#c17b52' : colors.pink; ctx.fillRect(enemy.x - barWidth / 2, barY, barWidth * (enemy.hp / enemy.maxHp), 3);
+    const barWidth = enemy.type === 'boss' || enemy.type === 'minotaur' ? 46 : enemy.type === 'tank' || enemy.type === 'golem' ? 28 : enemy.type === 'charger' || enemy.type === 'necromancer' ? 24 : 20; const barY = enemy.type === 'boss' || enemy.type === 'minotaur' ? enemy.y - 34 : enemy.y - 20; ctx.fillStyle = '#1b1529'; ctx.fillRect(enemy.x - barWidth / 2, barY, barWidth, 3); ctx.fillStyle = enemy.type === 'boss' ? '#b74765' : enemy.type === 'minotaur' ? '#9d5148' : enemy.type === 'mage' || enemy.type === 'necromancer' ? colors.purple : enemy.type === 'charger' ? '#d94f63' : enemy.type === 'tank' || enemy.type === 'golem' ? '#c17b52' : colors.pink; ctx.fillRect(enemy.x - barWidth / 2, barY, barWidth * (enemy.hp / enemy.maxHp), 3);
   }
 
   function drawWebs() { webs.forEach(web => { const radius = web.radius + Math.sin(web.pulse) * 2; ctx.save(); ctx.globalAlpha = web.arming > 0 ? .22 : Math.min(.8, web.life / 5); ctx.strokeStyle = '#e8def0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(web.x, web.y, radius, 0, Math.PI * 2); ctx.moveTo(web.x - radius, web.y); ctx.lineTo(web.x + radius, web.y); ctx.moveTo(web.x, web.y - radius); ctx.lineTo(web.x, web.y + radius); ctx.moveTo(web.x - radius * .7, web.y - radius * .7); ctx.lineTo(web.x + radius * .7, web.y + radius * .7); ctx.moveTo(web.x + radius * .7, web.y - radius * .7); ctx.lineTo(web.x - radius * .7, web.y + radius * .7); ctx.stroke(); ctx.restore(); }); }
@@ -661,7 +744,7 @@
     player.drawState = { token, elapsed: 0, duration: .8 };
     setTip(`Drawing ${weapons[weapon].name.toLowerCase()}...`);
     if (activeDrawAudio) { activeDrawAudio.pause(); activeDrawAudio.currentTime = 0; }
-    const drawSound = weapon === 'blade' ? 'drawBlade' : 'drawWand';
+    const drawSound = weapon === 'wand' ? 'drawWand' : 'drawBlade';
     activeDrawAudio = playFile(drawSound, () => finishWeaponDraw(token));
     activeDrawAudio.addEventListener('loadedmetadata', () => {
       if (player?.drawState?.token === token && Number.isFinite(activeDrawAudio.duration)) player.drawState.duration = Math.max(.25, activeDrawAudio.duration);
@@ -732,7 +815,7 @@
     keys.add(key);
     if (key === 'space' && !event.repeat) beginAttackCharge();
     if (key === 'x' && !event.repeat) detonateWand();
-    if (key === '1') selectWeapon('blade'); if (key === '2') selectWeapon('wand');
+    if (key === '1') selectWeapon('blade'); if (key === '2') selectWeapon('wand'); if (key === '3') selectWeapon('claws');
     if (key === 'enter' && state !== 'playing') newRun();
   });
   window.addEventListener('keyup', event => { const key = event.key.toLowerCase() === ' ' ? 'space' : event.key.toLowerCase(); if (key === 'space') releaseAttackCharge(); keys.delete(key); });
@@ -748,8 +831,8 @@
   const touchDetonate = document.getElementById('touchDetonate');
   const touchAimStick = document.getElementById('touchAimStick');
   const touchAimKnob = document.getElementById('touchAimKnob');
-  const releaseTouchAttack = event => { event.preventDefault(); touchAttack.classList.remove('active'); releaseAttackCharge(); };
-  touchAttack.addEventListener('pointerdown', event => { event.preventDefault(); touchAttack.setPointerCapture?.(event.pointerId); touchAttack.classList.add('active'); beginAttackCharge(); });
+  const releaseTouchAttack = event => { event.preventDefault(); touchAttackHeld = false; touchAttack.classList.remove('active'); releaseAttackCharge(); };
+  touchAttack.addEventListener('pointerdown', event => { event.preventDefault(); touchAttack.setPointerCapture?.(event.pointerId); touchAttackHeld = true; touchAttack.classList.add('active'); beginAttackCharge(); });
   touchAttack.addEventListener('pointerup', releaseTouchAttack);
   touchAttack.addEventListener('pointercancel', releaseTouchAttack);
   touchAttack.addEventListener('lostpointercapture', releaseTouchAttack);
