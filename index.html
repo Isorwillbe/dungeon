@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#171426" />
+  <title>Cryptbound: Pocket Dungeon</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="arcade-shell">
+    <header class="topbar">
+      <div class="brand-mark" aria-label="Cryptbound">
+        <span class="brand-gem">◆</span>
+        <div>
+          <p class="eyebrow">Pocket Quest / 1991</p>
+          <h1>CRYPTBOUND</h1>
+        </div>
+      </div>
+      <div class="run-meta">
+        <span class="run-label">RUN</span>
+        <span id="runNumber">01</span>
+        <span class="meta-divider">•</span>
+        <span id="floorNumber">FLOOR 01</span>
+      </div>
+      <div class="header-actions">
+        <button id="pauseButton" class="mini-button" type="button">PAUSE [P]</button>
+        <button id="musicButton" class="mini-button" type="button">MUSIC: ON</button>
+        <button id="touchButton" class="mini-button" type="button">TOUCH: ON</button>
+      </div>
+    </header>
+
+    <section class="game-layout">
+      <aside class="sidebar left-panel" aria-label="Player status">
+        <div class="panel-heading"><span class="pixel-star">✦</span> HERO STATUS</div>
+        <div class="hero-card">
+          <div class="portrait-frame"><div class="hero-portrait">♟</div></div>
+          <div>
+            <p class="hero-name">THE WANDERER</p>
+            <p class="hero-class">DUNGEON RUNNER</p>
+          </div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-row"><span>VITALITY</span><strong id="hpText">10 / 10</strong></div>
+          <div class="bar"><span id="hpBar" class="bar-fill hp-fill"></span></div>
+          <div class="stat-row"><span>COINS</span><strong id="coinText">000</strong></div>
+          <div class="stat-row"><span>DEEP RUN</span><strong id="depthText">01:00</strong></div>
+        </div>
+        <div class="tip-box">
+          <span class="tip-icon">!</span>
+          <p id="tipText">Clear the crypt. Find the gate.</p>
+        </div>
+      </aside>
+
+      <section class="cabinet" aria-label="Cryptbound game screen">
+        <div class="screen-bezel">
+          <div class="screen-topline"><span>CRYPTBOUND SYSTEM</span><span id="statusLight">● READY</span></div>
+          <div class="canvas-wrap">
+            <canvas id="gameCanvas" width="864" height="528" aria-label="Playable dungeon crawler"></canvas>
+            <div id="messageCard" class="message-card hidden">
+              <p class="message-kicker">CRYPTBOUND</p>
+              <h2 id="messageTitle">RUN COMPLETE</h2>
+              <p id="messageBody">The gate is open.</p>
+              <button id="restartButton" class="pixel-button">PLAY AGAIN <span>↵</span></button>
+            </div>
+            <div id="pauseOverlay" class="pause-overlay hidden">
+              <p class="message-kicker">CRYPTBOUND SYSTEM</p>
+              <h2>PAUSED</h2>
+              <button id="resumeButton" class="pixel-button" type="button">RESUME <span>P</span></button>
+            </div>
+            <div id="touchControls" class="touch-controls" aria-label="Touch controls">
+              <div class="touch-dpad" aria-label="Movement">
+                <button class="touch-button touch-up" type="button" data-move-key="w" aria-label="Move up">▲</button>
+                <button class="touch-button touch-left" type="button" data-move-key="a" aria-label="Move left">◀</button>
+                <button class="touch-button touch-down" type="button" data-move-key="s" aria-label="Move down">▼</button>
+                <button class="touch-button touch-right" type="button" data-move-key="d" aria-label="Move right">▶</button>
+              </div>
+              <div id="touchAimStick" class="touch-aim-stick" aria-label="Aim joystick">
+                <div class="touch-aim-label">AIM</div>
+                <div id="touchAimKnob" class="touch-aim-knob"></div>
+              </div>
+              <div class="touch-actions" aria-label="Combat controls">
+                <button class="touch-button touch-weapon" type="button" data-touch-weapon="blade">SWORD</button>
+                <button class="touch-button touch-weapon" type="button" data-touch-weapon="wand">WAND</button>
+                <button id="touchAttack" class="touch-button touch-attack" type="button">HOLD<br />SHOOT</button>
+                <button id="touchDetonate" class="touch-button touch-detonate" type="button">DETONATE</button>
+              </div>
+            </div>
+          </div>
+          <div class="screen-bottomline"><span>INSERT COURAGE</span><span>© 1991 C.B. LABS</span></div>
+        </div>
+        <div class="cabinet-controls" aria-hidden="true">
+          <span class="speaker-dot"></span><span class="speaker-dot"></span><span class="speaker-dot"></span><span class="speaker-dot"></span>
+          <span class="speaker-dot"></span><span class="speaker-dot"></span><span class="speaker-dot"></span><span class="speaker-dot"></span>
+          <span class="screw">+</span>
+        </div>
+      </section>
+
+      <aside class="sidebar right-panel" aria-label="Controls and loadout">
+        <div class="panel-heading"><span class="pixel-star">✦</span> LOADOUT</div>
+        <div id="weaponList" class="weapon-list">
+          <div class="weapon-card active" data-weapon="blade">
+            <div class="weapon-key">1</div><div class="weapon-icon">╱</div>
+            <div class="weapon-copy"><strong>IRON SWORD</strong><span>5 DMG · CLOSE</span></div>
+          </div>
+          <div class="weapon-card" data-weapon="wand">
+            <div class="weapon-key">2</div><div class="weapon-icon">✧</div>
+            <div class="weapon-copy"><strong>EMBER WAND</strong><span>2 DMG · RANGED</span></div>
+          </div>
+        </div>
+        <div class="controls-panel">
+          <div class="panel-heading compact">HOW TO PLAY</div>
+          <div class="key-row"><span class="keycap wide">W A S D</span><span>MOVE</span></div>
+          <div class="key-row"><span class="keycap wide">ARROWS</span><span>MOVE</span></div>
+          <div class="key-row"><span class="keycap">SPACE</span><span>HOLD TO CHARGE</span></div>
+          <div class="key-row"><span class="keycap">MOUSE</span><span>AIM / FIRE / CHARGE</span></div>
+          <div class="key-row"><span class="keycap">X</span><span>DETONATE</span></div>
+          <div class="key-row"><span class="keycap">1 / 2</span><span>SWITCH</span></div>
+        </div>
+        <div class="legend"><span class="legend-dot hero-dot"></span> YOU <span class="legend-dot enemy-dot"></span> MONSTER <span class="legend-dot mage-dot"></span> MAGE <span class="legend-dot tank-dot"></span> TANK <span class="legend-dot boss-dot"></span> BOSS <span class="legend-dot gate-dot"></span> GATE</div>
+      </aside>
+    </section>
+
+    <footer class="footer-note"><span>★ RANDOMIZED EVERY RUN</span><span>FAST. FRIGHTENING. FUN.</span><span>BEST SCORE: <b id="bestScore">0000</b></span></footer>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
